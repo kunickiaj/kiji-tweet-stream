@@ -56,6 +56,7 @@ object TweetIngester extends App {
             case Some(tweet) =>
               writer.put(table.getEntityId(status.getUser.getId: java.lang.Long), COL_F, COL_Q, tweet.getCreatedAt, tweet)
               tweetCount += 1
+              sender ! AvroTweet(tweet)
               if (tweetCount % 500 == 0) {
                 writer.flush()
                 sender ! Progress(tweetCount)
@@ -134,7 +135,6 @@ object TweetIngester extends App {
 
           def onStatus(status: Status) {
             writerRouter ! TweetReceived(status)
-            indexerRouter ! TweetReceived(status)
           }
 
           def onTrackLimitationNotice(numLimitedStatuses: Int) {}
@@ -144,6 +144,8 @@ object TweetIngester extends App {
       case Progress(numTweets) =>
         totalTweets += numTweets
         log.info(f"Wrote $totalTweets%d tweets.")
+      case AvroTweet(tweet) =>
+        indexerRouter ! AvroTweet(tweet)
       case _ => log.warn("Dropping unrecognized message.")
     }
   }
