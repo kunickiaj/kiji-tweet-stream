@@ -37,6 +37,8 @@ object TweetIngester extends App {
 
   class KijiTweetWriter extends Actor {
 
+    var tweetCount: Int = _
+
     def receive = {
       case TweetReceived(status) =>
         log.debug("Tweet! " + status.getText)
@@ -46,6 +48,11 @@ object TweetIngester extends App {
           makeTweet(status) match {
             case Some(tweet) =>
               writer.put(table.getEntityId(status.getUser.getId: java.lang.Long), COL_F, COL_Q, tweet.getCreatedAt, tweet)
+              tweetCount += 1
+              if (tweetCount % 500 == 0) {
+                writer.flush()
+                sender ! Progress(tweetCount)
+              }
             case None => log.warn("Unable to parse Tweet")
           }
         } catch {
@@ -78,6 +85,8 @@ object TweetIngester extends App {
     val writerRouter = context.actorOf(Props[KijiTweetWriter].withRouter(RoundRobinRouter(numWriters)), name = "writerRouter")
     val indexerRouter = context.actorOf(Props[SolrIndexer].withRouter(RoundRobinRouter(numIndexers)), name = "indexerRouter")
 
+    var totalTweets: Int = _
+
     def receive = {
       case Start =>
         // Connect to the Twitter API and start sending out tweets
@@ -104,7 +113,9 @@ object TweetIngester extends App {
         }
         tweetStream.addListener(statusListener)
         tweetStream.sample()
-      case Progress =>
+      case Progress(numTweets) =>
+        totalTweets += numTweets
+        log.info(f"Wrote $totalTweets%d tweets.")
       case _ => log.warn("Dropping unrecognized message.")
     }
   }
