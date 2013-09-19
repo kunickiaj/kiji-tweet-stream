@@ -1,0 +1,56 @@
+@namespace("com.adamkunicki.avro")
+protocol TwitterRecords {
+
+    record Geolocation {
+        double latitude;
+        double longitude;
+    }
+
+    record Place {
+        string name;
+        union { string, null } streetAddress;
+        string countryCode;
+        string id;
+        string country;
+        string placeType;
+        union { string, null } url = null;
+        string fullName;
+        union { string, null } boundingBoxType;
+        union { array<array<Geolocation>>, null } boundingBoxCoordinates = null;
+        union { string, null } geometryType = null;
+        union { array<array<Geolocation>>, null } geometryCoordinates = null;
+        union { array<Place>, null } containedWithin = null;
+    }
+
+    record User {
+        long id;
+        string name;
+        string screenName;
+        union { string, null } location = null;
+        union { string, null } description = null;
+        int followersCount;
+        int statusesCount;
+    }
+
+    record Tweet {
+        long createdAt;
+        long id;
+        string text;
+        string source;
+        boolean isTruncated;
+        union { long, null } inReplyToStatusId;
+        union { long, null } inReplyToUserId;
+        union { string, null } inReplyToScreenName;
+        union { Geolocation, null } geolocation = null;
+        union { Place, null } place = null;
+        boolean isFavorited;
+        boolean isRetweeted;
+        long favoriteCount;
+        User user;
+        union { Tweet, null } retweetedStatus;
+        union { array<long>, null } contributors;
+        long retweetCount;
+        boolean isPossiblySensitive;
+        union { string, null } isoLanguageCode;
+    }
+}
