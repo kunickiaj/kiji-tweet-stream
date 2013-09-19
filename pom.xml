@@ -8,6 +8,7 @@
     <properties>
         <scala.version>2.10.2</scala.version>
         <maven-replacer-plugin.version>1.5.2</maven-replacer-plugin.version>
+        <es.version>0.90.5</es.version>
     </properties>
 
     <repositories>
@@ -61,11 +62,10 @@
             <version>1.7.5</version>
         </dependency>
 
-        <!-- Solr -->
         <dependency>
-            <groupId>org.apache.solr</groupId>
-            <artifactId>solr-solrj</artifactId>
-            <version>4.4.0</version>
+            <groupId>org.elasticsearch</groupId>
+            <artifactId>elasticsearch</artifactId>
+            <version>${es.version}</version>
         </dependency>
 
         <!-- Hadoop -->

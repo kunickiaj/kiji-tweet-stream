@@ -9,6 +9,9 @@ import org.kiji.schema._
 import java.io.IOException
 import twitter4j._
 import scala.collection.JavaConverters._
+import org.kiji.schema.util.ToJson
+import org.elasticsearch.client.transport.TransportClient
+import org.elasticsearch.common.transport.InetSocketTransportAddress
 
 object TweetIngester extends App {
 
@@ -18,6 +21,10 @@ object TweetIngester extends App {
   val tweetTableName = "tweet"
   val COL_F = "info"
   val COL_Q = "tweet"
+
+  val esIndexName = "twitter"
+  val esDocType = "tweet"
+  val esHostAddress = "xwing07.ul.wibidata.net"
 
   val numWriters = 2
   val numIndexers = 2
@@ -65,9 +72,30 @@ object TweetIngester extends App {
     }
   }
 
-  class SolrIndexer extends Actor {
+  class Indexer extends Actor {
+    val client = new TransportClient()
+      .addTransportAddress(new InetSocketTransportAddress(esHostAddress, 9300))
+    val bulkRequest = client.prepareBulk()
+
+    var tweetCount: Int = _
+
     def receive = {
-      case _ => log.debug("Indexing")
+      case AvroTweet(tweet) =>
+        bulkRequest.add(client.prepareIndex(esIndexName, esDocType, tweet.getId.toString)
+          .setSource(ToJson.toJsonString(tweet, tweet.getSchema)))
+        tweetCount += 1
+
+        if (tweetCount % 500 == 0) {
+          val response = bulkRequest.execute().actionGet()
+          if (response.hasFailures) {
+            log.error(response.buildFailureMessage())
+          }
+        }
+      case _ => log.warn("Indexer received unsupported message type.")
+    }
+
+    override def postStop(): Unit = {
+      client.close()
     }
   }
 
@@ -83,7 +111,7 @@ object TweetIngester extends App {
 
   class Master(numWriters: Int, numIndexers: Int, listener: ActorRef) extends Actor {
     val writerRouter = context.actorOf(Props[KijiTweetWriter].withRouter(RoundRobinRouter(numWriters)), name = "writerRouter")
-    val indexerRouter = context.actorOf(Props[SolrIndexer].withRouter(RoundRobinRouter(numIndexers)), name = "indexerRouter")
+    val indexerRouter = context.actorOf(Props[Indexer].withRouter(RoundRobinRouter(numIndexers)), name = "indexerRouter")
 
     var totalTweets: Int = _
 
