@@ -26,6 +26,10 @@ object TweetIngester extends App {
   val esDocType = "tweet"
   val esHostAddress = args(1)
 
+  val initialTweets = 1000
+  // "amandabynes",  "rihanna", "katyperry", "jtimberlake", "ActuallyNPH", "wibidata"
+  val usersToFollow = Array[Long](243442402, 79293791, 21447363, 26565946, 90420314, 377018652)
+
   val numWriters = 4
   val numIndexers = 4
 
@@ -58,7 +62,7 @@ object TweetIngester extends App {
               sender ! AvroTweet(tweet)
               if (tweetCount % 500 == 0) {
                 writer.flush()
-                sender ! Progress(tweetCount)
+                sender ! Progress(500)
               }
             case None => log.warn("Unable to parse Tweet")
           }
@@ -80,6 +84,7 @@ object TweetIngester extends App {
     val bulkRequest = client.prepareBulk()
 
     var tweetCount: Int = _
+    var errorCount: Int = _
 
     def receive = {
       case AvroTweet(tweet) =>
@@ -91,6 +96,7 @@ object TweetIngester extends App {
           val response = bulkRequest.execute().actionGet()
           if (response.hasFailures) {
             log.error(response.buildFailureMessage())
+            errorCount += 1
           }
         }
       case _ => log.warn("Indexer received unsupported message type.")
@@ -141,7 +147,7 @@ object TweetIngester extends App {
           def onTrackLimitationNotice(numLimitedStatuses: Int) {}
         }
         tweetStream.addListener(statusListener)
-        tweetStream.sample()
+        tweetStream.filter(new FilterQuery(initialTweets, usersToFollow))
       case Progress(numTweets) =>
         totalTweets += numTweets
         log.info(f"Wrote $totalTweets%d tweets.")
