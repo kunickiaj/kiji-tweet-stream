@@ -24,10 +24,10 @@ object TweetIngester extends App {
 
   val esIndexName = "twitter"
   val esDocType = "tweet"
-  val esHostAddress = "xwing07.ul.wibidata.net"
+  val esHostAddress = args(1)
 
-  val numWriters = 2
-  val numIndexers = 2
+  val numWriters = 4
+  val numIndexers = 4
 
   // Try to open a Kiji instance.
   val kiji = Kiji.Factory.open(kijiUri)
@@ -45,12 +45,11 @@ object TweetIngester extends App {
   class KijiTweetWriter extends Actor {
 
     var tweetCount: Int = _
+    val table = tablePool.get(tweetTableName)
+    val writer = table.openTableWriter()
 
     def receive = {
       case TweetReceived(status) =>
-        log.debug("Tweet! " + status.getText)
-        val table = tablePool.get(tweetTableName)
-        val writer = table.openTableWriter()
         try {
           makeTweet(status) match {
             case Some(tweet) =>
@@ -66,10 +65,12 @@ object TweetIngester extends App {
         } catch {
           case e: IOException =>
             log.error("Error while writing tweet", e)
-        } finally {
-          writer.close()
-          table.release()
         }
+    }
+
+    override def postStop(): Unit = {
+      writer.close()
+      table.release()
     }
   }
 
