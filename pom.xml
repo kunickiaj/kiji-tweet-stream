@@ -23,6 +23,11 @@
                 <enabled>true</enabled>
             </snapshots>
         </repository>
+        <repository>
+            <id>sonatype</id>
+            <name>Sonatype</name>
+            <url>http://repository.sonatype.org/content/groups/public/</url>
+        </repository>
     </repositories>
 
     <pluginRepositories>
@@ -39,6 +44,12 @@
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-library</artifactId>
             <version>${scala.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.scopt</groupId>
+            <artifactId>scopt_2.10</artifactId>
+            <version>3.1.0</version>
         </dependency>
 
         <!-- Akka -->

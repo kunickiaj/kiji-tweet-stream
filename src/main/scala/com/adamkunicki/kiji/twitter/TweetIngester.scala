@@ -12,26 +12,77 @@ import scala.collection.JavaConverters._
 import org.kiji.schema.util.ToJson
 import org.elasticsearch.client.transport.TransportClient
 import org.elasticsearch.common.transport.InetSocketTransportAddress
+import scala.Long
 
 object TweetIngester extends App {
 
   lazy val log = LoggerFactory.getLogger(getClass.getName)
 
-  val kijiUri = KijiURI.newBuilder(args(0)).build()
-  val tweetTableName = "tweet"
-  val COL_F = "info"
-  val COL_Q = "tweet"
+  case class Config(
+                     kijiUriString: String = "kiji://.env/default",
+                     tweetTableName: String = "tweet",
+                     colF: String = "info",
+                     colQ: String = "tweet",
+                     esIndexName: String = "twitter",
+                     esDocType: String = "tweet",
+                     esHostAddress: String = "localhost",
+                     usersToFollow: Seq[Long] = Seq(),
+                     numWriters: Int = 4,
+                     numIndexers: Int = 4
+                     )
 
-  val esIndexName = "twitter"
-  val esDocType = "tweet"
-  val esHostAddress = args(1)
+  val parser = new scopt.OptionParser[Config]("TweetIngester") {
+    head("TweetIngester", "0.0.1")
+    opt[String]("kiji") action {
+      (x, c) =>
+        c.copy(kijiUriString = x)
+    } text """Kiji Instance URI. Default: "kiji://.env/default""""
+    opt[String]('t', "table") action {
+      (x, c) =>
+        c.copy(tweetTableName = x)
+    } text """Kiji Table Name. Default: "tweet""""
+    opt[String]('f', "family") action {
+      (x, c) =>
+        c.copy(colF = x)
+    } text """Column Family. Default: "info""""
+    opt[String]('q', "qualifier") action {
+      (x, c) =>
+        c.copy(colQ = x)
+    } text """Column Qualifier. Default: "tweet""""
+    opt[String]('i', "index") action {
+      (x, c) =>
+        c.copy(esIndexName = x)
+    } text """Elastic Search index name. Default: "twitter""""
+    opt[String]("doctype") action {
+      (x, c) =>
+        c.copy(esDocType = x)
+    } text """Elastic Search document type. Default: "tweet""""
+    opt[String]("eshost") action {
+      (x, c) =>
+        c.copy(esHostAddress = x)
+    } text """Elastic Search host. Default: "localhost""""
+    opt[Seq[Long]]('u', "users") action {
+      (x, c) =>
+        c.copy(usersToFollow = x)
+    } text "User Ids to subscribe to."
+    opt[Int]("nw") action {
+      (x, c) =>
+        c.copy(numWriters = x)
+    } text "Number of write threads. Default: 4"
+    opt[Int]("ni") action {
+      (x, c) =>
+        c.copy(numIndexers = x)
+    } text "Number of index threads. Default: 4"
+  }
 
-  val initialTweets = 1000
+  val parsed = parser.parse(args, Config())
+  if (parsed.isEmpty) { System.exit(1) }
+  val config = parsed.get
+
+  val kijiUri = KijiURI.newBuilder(config.kijiUriString).build()
+
   // "amandabynes",  "rihanna", "katyperry", "jtimberlake", "ActuallyNPH", "wibidata"
   val usersToFollow = Array[Long](243442402, 79293791, 21447363, 26565946, 90420314, 377018652)
-
-  val numWriters = 4
-  val numIndexers = 4
 
   // Try to open a Kiji instance.
   val kiji = Kiji.Factory.open(kijiUri)
@@ -42,14 +93,14 @@ object TweetIngester extends App {
 
   val system = ActorSystem("TweetIngestSystem")
   val listener = system.actorOf(Props[Listener], name = "listener")
-  val master = system.actorOf(Props(new Master(numWriters, numIndexers, listener)))
+  val master = system.actorOf(Props(new Master(config.numWriters, config.numIndexers, listener)))
 
   master ! Start
 
-  class KijiTweetWriter extends Actor {
+  class KijiTweetWriter(tablePool: KijiTablePool, config: Config) extends Actor {
 
     var tweetCount: Int = _
-    val table = tablePool.get(tweetTableName)
+    val table = tablePool.get(config.tweetTableName)
     val writer = table.openTableWriter()
 
     def receive = {
@@ -57,7 +108,7 @@ object TweetIngester extends App {
         try {
           makeTweet(status) match {
             case Some(tweet) =>
-              writer.put(table.getEntityId(status.getUser.getId: java.lang.Long), COL_F, COL_Q, tweet.getCreatedAt, tweet)
+              writer.put(table.getEntityId(status.getUser.getId: java.lang.Long), config.colF, config.colQ, tweet.getCreatedAt, tweet)
               tweetCount += 1
               sender ! AvroTweet(tweet)
               if (tweetCount % 500 == 0) {
